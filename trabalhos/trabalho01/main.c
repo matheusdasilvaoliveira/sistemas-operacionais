@@ -4,87 +4,110 @@
 #include <signal.h>
 #include <sys/types.h>
 
-// [[pid, pc da CPU], [pid, pc da CPU]]
-int processos[3][2];
-int qntProcessos = 3;
+#define QNTPROCESSOS 3
 
-void kernelSim(){
-   
-}
+typedef struct{
+    int pid;
+    int pc;
+} Processo;
 
-void interControllerSim(){
-       while(1){
+int processoAtual = 0;
+Processo processos[QNTPROCESSOS];
+
+typedef struct{
+    int fila[6];
+    int inicio;
+    int fim;
+    
+} FilaIO;
+
+void interControllerSim(int kernel){
+    while(1){
         printf("[controller], em execução...\n");
-        sleep(1);
+        
+        if(0){ // TODO: vai virá o tamanho da fila
+            sleep(3);
+            kill(kernel, SIGUSR2);
+        }
+
+        sleep(5);
+        kill(kernel,SIGUSR1);
     }
 }
 
-void criaProcesso(int id, int *processo) {
-    int tempoCPU = processo[1];
 
-    processo[0] = fork();
-    processo[1] = 0;
-
-    if(processo[0]==0){
-        kill(processo[0], SIGSTOP); 
-        exit(0);
-    }
-
-    printf("Processo [A%d] criado | pc = %d\n", id, processo[1]);
-}
-
-void processoAplicacao(int id, int pc){
+void executaProcesso(int id, int pc){
     while(1){
         printf("[A%d], em execução, pc = %d\n", id, pc);
         pc++;
+        
+        // Tem que ter um pc maximo e em algum momento 
         sleep(1);
     }
 }
 
+void criaProcesso(int id, Processo *processo) {
+
+    processo->pid = fork();
+    processo->pc = 0;
+
+    if(processo->pid == 0){
+        executaProcesso(id, processo->pc);
+        exit(0);
+    }
+    
+    kill(processo->pid, SIGSTOP); 
+}
+
+void escalonaProcesso(){
+    
+    kill(processos[processoAtual].pid, SIGSTOP);
+
+    processoAtual = (processoAtual+1) % QNTPROCESSOS;
+
+    kill(processos[processoAtual].pid, SIGCONT);
+}
+
+void trataTimeSlice(int sinal){
+    escalonaProcesso(); 
+
+}
+
+
+void trataIO(int sinal){
+
+}
+
 int main(){
-    // printf("Entre com a quantidade de processos entre 3 a 6: ");
-    // scanf("%d", &qntProcessos);
-
-    // while(qntProcessos < 3 || qntProcessos > 6){
-
-    //     printf("Valor invalido, digite entre 3 e 6: ");
-    //     scanf("%d", &qntProcessos);
-        
-    // }
-
-    // pid_t pid[qntProcessos];
-
-    // pid = fork();
-
-    // if(pid == 0){
-    //     // interControllerSim();
-    //     exit(0);
-    // }
 
     pid_t kernel = fork();
 
     if(kernel == 0){
-        for(int i = 0; i<qntProcessos;i++){
-            criaProcesso((i + 1), processos[i]);
+
+        for(int i = 0; i<QNTPROCESSOS;i++){
+            criaProcesso((i + 1), &processos[i]);
 
         }
-    
-        int atual=0;
+
+        kill(processos[0].pid, SIGCONT);
+
+        signal(SIGUSR1, trataTimeSlice);
+        signal(SIGUSR2, trataIO);
 
         while(1){
-            printf("[kernel], em execução...\n");
-            sleep(1);
-
-            kill(pid[atual], SIGCONT);
-            sleep(3);
-            kill(pid[atual], SIGSTOP);
-            atual = (atual+1)%qntProcessos;
-    
-            sleep(10);
+            pause();
         }
 
-            exit(0);
+
+        exit(0);
         
+    }
+
+    pid_t interController = fork();
+
+    if(interController == 0){
+        interControllerSim(kernel);
+        exit(0);
     }
 
     
