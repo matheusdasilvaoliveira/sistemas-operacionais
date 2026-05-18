@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <glib.h>
 #include <unistd.h>
 #include <signal.h>
 #include <sys/types.h>
@@ -14,24 +15,22 @@ typedef struct{
 int processoAtual = 0;
 Processo processos[QNTPROCESSOS];
 
-typedef struct{
-    int fila[6];
-    int inicio;
-    int fim;
-    
-} FilaIO;
+
+
+GQueue *filaBloqueados;
+GQueue *filaProntos;
 
 void interControllerSim(int kernel){
+    int segundos;
     while(1){
-        printf("[controller], em execução...\n");
+        sleep(1);
+        segundos++;
         
-        if(0){ // TODO: vai virá o tamanho da fila
-            sleep(3);
-            kill(kernel, SIGUSR2);
-        }
+        kill(kernel, SIGUSR1);// significa que acabou o timeslice 
 
-        sleep(5);
-        kill(kernel,SIGUSR1);
+        if(segundos % 3 == 0){ 
+            kill(kernel, SIGUSR2); // significa que acabou o IO
+        }
     }
 }
 
@@ -39,9 +38,11 @@ void interControllerSim(int kernel){
 void executaProcesso(int id, int pc){
     while(1){
         printf("[A%d], em execução, pc = %d\n", id, pc);
+        if(pc == 5 ){
+            kill(getppid(), SIGTTIN);
+        }
         pc++;
         
-        // Tem que ter um pc maximo e em algum momento 
         sleep(1);
     }
 }
@@ -57,29 +58,38 @@ void criaProcesso(int id, Processo *processo) {
     }
     
     kill(processo->pid, SIGSTOP); 
-}
-
-void escalonaProcesso(){
-    
-    kill(processos[processoAtual].pid, SIGSTOP);
-
-    processoAtual = (processoAtual+1) % QNTPROCESSOS;
-
-    kill(processos[processoAtual].pid, SIGCONT);
-}
-
-void trataTimeSlice(int sinal){
-    escalonaProcesso(); 
-
+    g_queue_push_tail(filaProntos, processo);
 }
 
 
-void trataIO(int sinal){
+// tratadores de sinais 
+void finalizaTimeSlice(int sinal){
+    Processo processoAtual = g_queue_peek_head(filaProntos);
+
+    kill(g_queue_pop_head(filaProntos), SIGSTOP);
+    g_queue_push_tail(filaProntos, processoAtual);
+    kill(g_queue_peek_head(filaProntos), SIGCONT);
 
 }
 
+void bloqueiaProcesso(int sinal){
+    Processo processoAtual = g_queue_peek_head(filaProntos);
+
+    kill(g_queue_pop_head(filaProntos), SIGSTOP);
+    g_queue_push_tail(filaBloqueados, processoAtual);
+}
+
+void finalizaIO(int sinal){
+    Processo processoAtual = g_queue_peek_head(filaBloqueados);
+    g_queue_pop_head(filaBloqueados);
+    g_queue_push_tail(filaProntos, processoAtual);
+}
+
+// principal
 int main(){
-
+    filaBloqueados = g_queue_new();
+    filaProntos = g_queue_new();
+    
     pid_t kernel = fork();
 
     if(kernel == 0){
@@ -88,11 +98,16 @@ int main(){
             criaProcesso((i + 1), &processos[i]);
 
         }
+        if(!g_queue_is_empty(filaProntos)){
+            Processo primeiroProcesso=(*Processo) g_queue_peek_head(filaProntos);
+            kill(primeiroProcesso->pid, SIGCONT);
 
-        kill(processos[0].pid, SIGCONT);
+        }
 
-        signal(SIGUSR1, trataTimeSlice);
-        signal(SIGUSR2, trataIO);
+        signal(SIGUSR1, finalizaTimeSlice);
+        signal(SIGUSR2, finalizaIO);
+        signal(SIGTTIN, bloqueiaProcesso);
+        signal(SIGTTOU, bloqueiaProcesso);
 
         while(1){
             pause();
