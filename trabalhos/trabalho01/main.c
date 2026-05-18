@@ -73,14 +73,15 @@ void finalizaTimeSlice(int sinal){
 }
 
 void bloqueiaProcesso(int sinal){
-    Processo processoAtual = g_queue_peek_head(filaProntos);
+    Processo processoAtual = (*Processo) g_queue_peek_head(filaProntos);
 
-    kill(g_queue_pop_head(filaProntos), SIGSTOP);
+    kill(processoAtual, SIGSTOP);
+    g_queue_pop_head(filaProntos);
     g_queue_push_tail(filaBloqueados, processoAtual);
 }
 
 void finalizaIO(int sinal){
-    Processo processoAtual = g_queue_peek_head(filaBloqueados);
+    Processo processoAtual = (*Processo) g_queue_peek_head(filaBloqueados);
     g_queue_pop_head(filaBloqueados);
     g_queue_push_tail(filaProntos, processoAtual);
 }
@@ -99,7 +100,7 @@ int main(){
 
         }
         if(!g_queue_is_empty(filaProntos)){
-            Processo primeiroProcesso=(*Processo) g_queue_peek_head(filaProntos);
+            Processo primeiroProcesso = (*Processo) g_queue_peek_head(filaProntos);
             kill(primeiroProcesso->pid, SIGCONT);
 
         }
