@@ -46,7 +46,7 @@ void executaProcesso(int id, int pcInicial, int* momentosIo, int qtdIo, int pcFi
     int pc = pcInicial;
     int ioIndex = 0;
 
-    while(pc < pcFinal && pc < QNTPCMAX) {
+    while(pc <= pcFinal && pc < QNTPCMAX) {
         printf("[A%d] - em execução, PC = %d\n", id, pc);
         
 
