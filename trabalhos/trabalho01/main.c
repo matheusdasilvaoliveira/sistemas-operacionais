@@ -34,10 +34,10 @@ void interControllerSim(int kernel){
         sleep(1);
         segundos++;
         
-        kill(kernel, SIGUSR1);// significa que acabou o timeslice 
+        kill(kernel, SIGUSR1); 
 
         if(segundos % 3 == 0){ 
-            kill(kernel, SIGUSR2); // significa que acabou o IO
+            kill(kernel, SIGUSR2); 
         }
     }
 }
@@ -66,7 +66,7 @@ void executaProcesso(int id, int pcInicial, int* momentosIo, int qtdIo, int pcFi
     if (pc >= QNTPCMAX) {
         printf("[A%d] ATINGIU O LIMITE MÁXIMO DO SISTEMA (%d) E FOI ENCERRADO.\n", id, QNTPCMAX);
     } else {
-        printf("[A%d] CHEGOU AO SEU PC FINAL PRÓPRIO (%d) E TERMINOU NATURALMENTE.\n", id, pcFinal);
+        printf("[A%d] CHEGOU AO SEU PC FINAL PRÓPRIO (%d).\n", id, pcFinal);
     }
 
     exit(0);
