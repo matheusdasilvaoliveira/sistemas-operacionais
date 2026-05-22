@@ -39,7 +39,11 @@ void interControllerSim(int kernel){
         sleep(1);
 
         segundos++;
-        
+
+        if(kill(kernel, 0) == -1){
+            if(errno == ESRCH) break;
+        }
+
         kill(kernel, SIGUSR1);
 
         if(segundos % 3 == 0){
@@ -361,6 +365,7 @@ int main(){
         criaProcesso(2,&processos[1],3, iosA2, sizeof(iosA2)/sizeof(iosA2[0]));
 
         criaProcesso(3, &processos[2], 3, iosA3, sizeof(iosA3)/sizeof(iosA3[0]));
+        
 
         printf("\n----------------------------\n");
 
