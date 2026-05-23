@@ -7,69 +7,74 @@
 #include <errno.h>
 #include "fila.h"
 
-#define QNTPROCESSOS 3
-#define QNTMAXIO 10
-#define QNTPCMAX 10
+#define FALSE 0
+#define TRUE 1
 
-typedef struct Processo {
+#define QTD_PROCESSOS 3
+#define QTD_MAX_IO 10
+#define QTD_MAX_PC 10
+
+typedef struct processo {
     int id;
     pid_t pid;
     int pc;
     int pcFinal;
-    int momentosIo[QNTMAXIO];
+    int momentosIo[QTD_MAX_IO];
     int qtdIos;
     int ioAtual;
 } Processo;
 
 int tempo = 0;
-volatile sig_atomic_t finishedCount = 0;
-Processo processos[QNTPROCESSOS];
-Processo *processo_executando = NULL;
+int contagensProcessosFinalizados = 0;
+Processo processos[QTD_PROCESSOS];
+Processo *processoExecutando = NULL;
 
-Fila *fila_bloqueados;
-Fila *fila_prontos;
+Fila *filaBloqueados;
+Fila *filaProntos;
 
-void interControllerSim(int kernel){
-    int segundos=0;
-    while(1){
+static int processoPodeContinuar = FALSE;
+
+static void trataSigcont(int signo) {
+    (void)signo;
+    processoPodeContinuar = TRUE;
+}
+
+void interControllerSim(int kernel) {
+    int segundos = 0;
+    while (1) {
         sleep(1);
         segundos++;
         if (kill(kernel, 0) == -1) {
-            if (errno == ESRCH) break;
+            break;
         }
         
         kill(kernel, SIGUSR1);
 
-        if(segundos % 3 == 0){ 
+        if (segundos % 3 == 0) {
             kill(kernel, SIGUSR2);
         }
     }
 }
 
 void executaProcesso(Processo *processo){
-    int ioIndex = processo->ioAtual;
-    volatile sig_atomic_t cont_flag = 0;
-    int local_pc = processo->pc;
+    int indiceIo = processo->ioAtual;
+    processoPodeContinuar = FALSE;
+    int pcLocal = processo->pc;
 
-    void sigcont_handler(int s){
-        (void)s;
-        cont_flag = 1;
-    }
+    signal(SIGCONT, trataSigcont);
 
-    signal(SIGCONT, sigcont_handler);
+    while (1) {
+        while (!processoPodeContinuar) pause();
+        processoPodeContinuar = FALSE;
 
-    while(1){
-        while(!cont_flag) pause();
-        cont_flag = 0;
+        if (pcLocal >= processo->pcFinal || pcLocal >= QTD_MAX_PC) break;
 
-        if (local_pc >= processo->pcFinal || local_pc >= QNTPCMAX) break;
-
-        if(ioIndex < processo->qtdIos && local_pc == processo->momentosIo[ioIndex]){
-            printf(">>> [A%d] PC=%d -> Syscall de I/O acionada\n", processo->id, local_pc);
+        if (indiceIo < processo->qtdIos && pcLocal == processo->momentosIo[indiceIo]) {
+            printf(">>> [A%d] PC=%d -> Syscall de I/O acionada\n", processo->id, pcLocal);
             fflush(stdout);
-            ioIndex++;
-            processo->ioAtual = ioIndex;
-            local_pc++;
+            indiceIo++;
+            processo->ioAtual = indiceIo;
+            pcLocal++;
             kill(getppid(), SIGTTIN);
             raise(SIGSTOP);
             continue;
@@ -77,13 +82,13 @@ void executaProcesso(Processo *processo){
 
         printf("[A%d] | EXECUTANDO\n", processo->id);
         fflush(stdout);
-        local_pc++;
+        pcLocal++;
         raise(SIGSTOP);
     }
 
-    processo->pc = local_pc;
-    if (local_pc >= QNTPCMAX) {
-        printf("\n>>> [A%d] ATINGIU O LIMITE MÁXIMO DO SISTEMA (%d) E FOI ENCERRADO.\n", processo->id, QNTPCMAX);
+    processo->pc = pcLocal;
+    if (pcLocal >= QTD_MAX_PC) {
+        printf("\n>>> [A%d] ATINGIU O LIMITE MÁXIMO DO SISTEMA (%d) E FOI ENCERRADO.\n", processo->id, QTD_MAX_PC);
     } else {
         printf("\n>>> [A%d] CHEGOU AO SEU PC FINAL (%d) E TERMINOU.\n", processo->id, processo->pcFinal);
     }
@@ -91,7 +96,7 @@ void executaProcesso(Processo *processo){
     exit(0);
 }
 
-void criaProcesso(int id, Processo *processo,int pcFinal,int *momentosIo, int qtdIos) {
+void criaProcesso(int id, Processo *processo, int pcFinal, int *momentosIo, int qtdIos) {
     processo->id = id;
     processo->pid = fork();
     processo->pc = 0;
@@ -111,37 +116,38 @@ void criaProcesso(int id, Processo *processo,int pcFinal,int *momentosIo, int qt
     printf("[Tempo %ds] Kernel: Criou processo A%d PID=%d | PC=%d\n", tempo, processo->id, processo->pid, processo->pc);
     fflush(stdout);
     
-    fila_enfileirar(fila_prontos, processo);
+    enfileiraFila(filaProntos, processo);
 }
 
-void finalizaTimeSlice(int sinal){
+void finalizaTimeSlice(int sinal) {
     tempo++;
-    if (processo_executando == NULL) {
+    if (processoExecutando == NULL) {
         return;
     }
-    Processo *processoAtual = processo_executando;
+    Processo *processoAtual = processoExecutando;
     int status = waitpid(processoAtual->pid, NULL, WNOHANG);
+    
     if (status > 0) {
-        finishedCount++;
+        contagensProcessosFinalizados++;
         printf("\n----------------------------\n");
         printf("[Tempo %ds] Kernel: [A%d] já havia finalizado (reap)\n", tempo, processoAtual->id);
         printf("----------------------------\n");
     } else {
         processoAtual->pc++;
         kill(processoAtual->pid, SIGSTOP);
-        fila_enfileirar(fila_prontos, processoAtual);
-        processo_executando = NULL;
+        enfileiraFila(filaProntos, processoAtual);
+        processoExecutando = NULL;
     }
 
-    if (finishedCount >= QNTPROCESSOS) {
+    if (contagensProcessosFinalizados >= QTD_PROCESSOS) {
         printf("\n=== Kernel: Todos os processos finalizaram. Encerrando kernel ===\n");
         fflush(stdout);
         exit(0);
     }
 
-    if (!fila_vazia(fila_prontos)) {
-        Processo *proximoProcesso = fila_desenfileirar(fila_prontos);
-        processo_executando = proximoProcesso;
+    if (!filaEhVazia(filaProntos)) {
+        Processo *proximoProcesso = desenfileiraFila(filaProntos);
+        processoExecutando = proximoProcesso;
         printf("----------------------------\n");
         printf("[Tempo %ds] Kernel: Escalando -> A%d | PC=%d\n", tempo, proximoProcesso->id, proximoProcesso->pc);
         fflush(stdout);
@@ -149,32 +155,32 @@ void finalizaTimeSlice(int sinal){
     }
 }
 
-void bloqueiaProcesso(int sinal){
-   if (processo_executando == NULL) return;
+void bloqueiaProcesso(int sinal) {
+    if (processoExecutando == NULL) return;
 
-    Processo *processoAtual = processo_executando;
+    Processo *processoAtual = processoExecutando;
     processoAtual->pc++;
     printf("\n=== Kernel: [A%d] realizou Syscall ===\n", processoAtual->id);
     printf("PC=%d | Movido para fila de bloqueados\n", processoAtual->pc);
-    fila_enfileirar(fila_bloqueados, processoAtual);
-    processo_executando = NULL;
+    enfileiraFila(filaBloqueados, processoAtual);
+    processoExecutando = NULL;
 
-    if (!fila_vazia(fila_prontos)) {
-        Processo *proximoProcesso = fila_desenfileirar(fila_prontos);
-        processo_executando = proximoProcesso;
+    if (!filaEhVazia(filaProntos)) {
+        Processo *proximoProcesso = desenfileiraFila(filaProntos);
+        processoExecutando = proximoProcesso;
         printf("\n=== Kernel: Escalando [A%d] após bloqueio ===\n", proximoProcesso->id);
         printf("Restaurando contexto: PC=%d\n", proximoProcesso->pc);
         kill(proximoProcesso->pid, SIGCONT);
     }
 }
 
-void handle_sigchld(int sinal){
+void trataSigchld(int sinal) {
     int status;
     pid_t pid;
     while((pid = waitpid(-1, &status, WNOHANG)) > 0){
-        finishedCount++;
+        contagensProcessosFinalizados++;
         fflush(stdout);
-        if(finishedCount >= QNTPROCESSOS){
+        if(contagensProcessosFinalizados >= QTD_PROCESSOS){
             printf("----------------------------\n");
             printf("\n=== Kernel: Todos os processos finalizaram. Encerrando kernel. ===\n");
             fflush(stdout);
@@ -183,20 +189,20 @@ void handle_sigchld(int sinal){
     }
 }
 
-void finalizaIO(int sinal){
-    if (fila_vazia(fila_bloqueados)) return;
+void liberaIO(int sinal) {
+    if (filaEhVazia(filaBloqueados)) return;
 
-    Processo *processoLiberado = fila_desenfileirar(fila_bloqueados);
+    Processo *processoLiberado = desenfileiraFila(filaBloqueados);
 
     printf("\n----------------------------\n");
     printf("[Tempo %ds] Kernel: I/O concluído -> A%d | PC=%d\n", tempo, processoLiberado->id, processoLiberado->pc);
     printf("----------------------------\n");
-    fila_enfileirar(fila_prontos, processoLiberado);
+    enfileiraFila(filaProntos, processoLiberado);
 
-    if (processo_executando == NULL) {
-        Processo *proximo = fila_desenfileirar(fila_prontos);
+    if (processoExecutando == NULL) {
+        Processo *proximo = desenfileiraFila(filaProntos);
         if (proximo) {
-            processo_executando = proximo;
+            processoExecutando = proximo;
             printf("[Tempo %ds] Kernel: Escalando (apos IO) -> A%d | PC=%d\n", tempo, proximo->id, proximo->pc);
             printf("----------------------------\n");
             fflush(stdout);
@@ -205,40 +211,39 @@ void finalizaIO(int sinal){
     }
 }
 
-int main(){
-    fila_bloqueados = fila_criar();
-    fila_prontos = fila_criar();
+int main(void) {
+    filaBloqueados = criaFila();
+    filaProntos = criaFila();
     
     pid_t kernel = fork();
 
     if(kernel == 0){
-        int iosA1[] = {}; 
-        int iosA2[] = {};    
-        int iosA3[] = { };   
+        int iosA1[] = {};
+        int iosA2[] = {};
+        int iosA3[] = {};
 
         printf("\n=== Kernel: Simulação iniciada ===\n");
         printf("----------------------------\n\n");
 
-        criaProcesso(1, &processos[0],5, iosA1, sizeof(iosA1)/sizeof(iosA1[0]));
-        criaProcesso(2, &processos[1],5, iosA2, sizeof(iosA2)/sizeof(iosA2[0]));
-        criaProcesso(3, &processos[2],5, iosA3, sizeof(iosA3)/sizeof(iosA3[0]));
+        criaProcesso(1, &processos[0], 5, iosA1, sizeof(iosA1)/sizeof(iosA1[0]));
+        criaProcesso(2, &processos[1], 5, iosA2, sizeof(iosA2)/sizeof(iosA2[0]));
+        criaProcesso(3, &processos[2], 5, iosA3, sizeof(iosA3)/sizeof(iosA3[0]));
 
         printf("\n----------------------------\n");
 
-        if(!fila_vazia(fila_prontos)){
-            Processo* primeiroProcesso = fila_desenfileirar(fila_prontos);
-            processo_executando = primeiroProcesso;
+        if (!filaEhVazia(filaProntos)) {
+            Processo *primeiroProcesso = desenfileiraFila(filaProntos);
+            processoExecutando = primeiroProcesso;
             printf("[Tempo %ds] -> A%d | PC=%d\n", tempo, primeiroProcesso->id, primeiroProcesso->pc);
             fflush(stdout);
             kill(primeiroProcesso->pid, SIGCONT);
-
         }
 
         signal(SIGUSR1, finalizaTimeSlice);
-        signal(SIGUSR2, finalizaIO);
+        signal(SIGUSR2, liberaIO);
         signal(SIGTTIN, bloqueiaProcesso);
         signal(SIGTTOU, bloqueiaProcesso);
-        signal(SIGCHLD, handle_sigchld);
+        signal(SIGCHLD, trataSigchld);
 
         while(1){
             pause();
@@ -247,17 +252,15 @@ int main(){
         
     }
 
-    pid_t interController = fork();
+    pid_t pidControlador = fork();
 
-    if(interController == 0){
+    if (pidControlador == 0) {
         interControllerSim(kernel);
         exit(0);
     }
 
     waitpid(kernel, NULL, 0);
-    waitpid(interController, NULL, 0);
+    waitpid(pidControlador, NULL, 0);
     
-    return(1);
+    return 0;
 }
-
-

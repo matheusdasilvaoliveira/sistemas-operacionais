@@ -1,71 +1,76 @@
 #include "fila.h"
-#include <stdio.h>
 #include <stdlib.h>
+#include <stdio.h>
 
-struct FilaNode {
+typedef struct node {
     Processo *processo;
-    struct FilaNode *next;
-};
+    struct node *proximo;
+} Node;
 
-struct Fila {
-    struct FilaNode *head;
-    struct FilaNode *tail;
-    int length;
-};
+typedef struct fila {
+    Node *inicio;
+    Node *fim;
+    int tamanho;
+} Fila;
 
-Fila *fila_criar(void) {
-    Fila *fila = malloc(sizeof(Fila));
-    if (!fila) {
-        perror("Erro ao alocar memória para a fila");
-        exit(EXIT_FAILURE);
+Fila *criaFila(void) {
+    Fila *fila = (Fila *)malloc(sizeof(Fila));
+    if (fila == NULL) {
+        perror("malloc");
+        exit(1);
     }
-    fila->head = NULL;
-    fila->tail = NULL;
-    fila->length = 0;
+    fila->inicio = NULL;
+    fila->fim = NULL;
+    fila->tamanho = 0;
+
     return fila;
 }
 
-int fila_vazia(const Fila *fila) {
-    return fila->length == 0;
+int filaEhVazia(const Fila *fila) {
+    return fila->tamanho == 0;
 }
 
-void fila_enfileirar(Fila *fila, Processo *processo) {
-    struct FilaNode *node = malloc(sizeof(struct FilaNode));
+void enfileiraFila(Fila *fila, Processo *processo) {
+    Node *node = (Node *)malloc(sizeof(Node));
     if (!node) {
-        perror("Erro ao alocar nó da fila");
-        exit(EXIT_FAILURE);
+        perror("malloc");
+        exit(1);
     }
+    
     node->processo = processo;
-    node->next = NULL;
+    node->proximo = NULL;
 
-    if (fila_vazia(fila)) {
-        fila->head = node;
-        fila->tail = node;
+    if (filaEhVazia(fila)) {
+        fila->inicio = node;
     } else {
-        fila->tail->next = node;
-        fila->tail = node;
+        fila->fim->proximo = node;
     }
-    fila->length++;
+    fila->fim = node;
+    fila->tamanho++;
 }
 
-Processo *fila_desenfileirar(Fila *fila) {
-    if (fila_vazia(fila)) {
+Processo *desenfileiraFila(Fila *fila) {
+    if (filaEhVazia(fila)) {
         return NULL;
     }
-    struct FilaNode *node = fila->head;
+    
+    Node *node = fila->inicio;
     Processo *processo = node->processo;
-    fila->head = node->next;
-    if (fila->head == NULL) {
-        fila->tail = NULL;
+    fila->inicio = node->proximo;
+    
+    if (fila->inicio == NULL) {
+        fila->fim = NULL;
     }
+    
     free(node);
-    fila->length--;
+    fila->tamanho--;
+    
     return processo;
 }
 
-Processo *fila_frente(const Fila *fila) {
-    if (fila_vazia(fila)) {
+Processo *primeiroProcessoNaFila(const Fila *fila) {
+    if (filaEhVazia(fila)) {
         return NULL;
     }
-    return fila->head->processo;
+    return fila->inicio->processo;
 }
