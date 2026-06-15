@@ -1,13 +1,13 @@
 #ifndef FILA_H
 #define FILA_H
 
-typedef struct processo Processo;
-typedef struct fila Fila;
+typedef struct Processo Processo;
+typedef struct Fila Fila;
 
-Fila *criaFila(void);
-int filaEhVazia(const Fila *fila);
-void enfileiraFila(Fila *fila, Processo *processo);
-Processo *desenfileiraFila(Fila *fila);
-Processo *primeiroProcessoNaFila(const Fila *fila);
+Fila *fila_criar(void);
+int fila_vazia(const Fila *fila);
+void fila_enfileirar(Fila *fila, Processo *processo);
+Processo *fila_desenfileirar(Fila *fila);
+Processo *fila_frente(const Fila *fila);
 
 #endif
