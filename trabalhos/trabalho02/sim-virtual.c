@@ -3,6 +3,7 @@
 #include <string.h>
 
 #define MAX_PAGINAS 1048576
+unsigned tempoAtual = 0;
 
 typedef struct {
     int presente;
@@ -124,6 +125,49 @@ void carregaPagina(Quadro memoriaFisica[], Pagina tabelaDePaginas[], int quadro,
     tabelaDePaginas[pagina].modificada = (operacao == 'W');
 }
 
+void atualizaPagina(Quadro memoriaFisica[], Pagina tabelaDePaginas[], unsigned int pagina, char operacao) {
+    int quadro = tabelaDePaginas[pagina].quadro;
+
+    tabelaDePaginas[pagina].referenciada = 1;
+    memoriaFisica[quadro].referenciada = 1;
+
+    if (operacao == 'W') {
+        tabelaDePaginas[pagina].modificada = 1;
+        memoriaFisica[quadro].modificada = 1;
+    }
+}
+
+void substituiPagina(Quadro memoriaFisica[], Pagina tabelaDePaginas[], int quadro, unsigned int novaPagina, char operacao) {
+
+    unsigned int paginaAntiga = memoriaFisica[quadro].pagina;
+
+    tabelaDePaginas[paginaAntiga].presente = 0;
+    tabelaDePaginas[paginaAntiga].quadro = -1;
+    tabelaDePaginas[paginaAntiga].referenciada = 0;
+    tabelaDePaginas[paginaAntiga].modificada = 0;
+
+    carregaPagina(memoriaFisica, tabelaDePaginas, quadro, novaPagina, operacao);
+}
+
+int lru(Quadro memoriaFisica[], int quantidadeDeQuadros) {
+    printf("Executando LRU...\n");
+    int quadroLRU = 0;
+
+    for (int i = 1; i < quantidadeDeQuadros; i++) {
+        if (memoriaFisica[i].tempo < memoriaFisica[quadroLRU].tempo) {
+            quadroLRU = i;
+
+        }
+
+    }
+    
+    return quadroLRU;
+}
+
+int clock();
+int nru();
+int otimo();
+
 int main(int argc, char *argv[]) {
 
     if (argc != 5) {
@@ -158,38 +202,60 @@ int main(int argc, char *argv[]) {
     //criando os quadros
     int quantidadeDeQuadros = calculaQuantidadeDeQuadros(tamanhoDaMemoria, tamanhoDaPagina);
     Quadro *memoriaFisica = criaMemoriaFisica(quantidadeDeQuadros);
+    
     if (memoriaFisica == NULL) return 1;
 
+    // toda a logica na memoria de paginação
     unsigned int enderecoVirtual;
     char operacao;
 
     while (fscanf(arquivoLog, "%x %c", &enderecoVirtual, &operacao) == 2) {
-
+        tempoAtual++;
         unsigned int pagina = calculaPagina(enderecoVirtual, tamanhoDaPagina);
 
         if (tabelaDePaginas[pagina].presente) {
 
-            printf("Pagina %u ja esta na memoria.\n", pagina);
-
-            // Futuramente:
-            // atualizar R
-            // atualizar M
-            // atualizar tempo (LRU)
+            atualizaPagina(memoriaFisica, tabelaDePaginas, pagina, operacao);
+            int quadro = tabelaDePaginas[pagina].quadro;
+            memoriaFisica[quadro].tempo = tempoAtual;
 
         } else {
+            printf("\n\nPage Fault na pagina %u.\n", pagina);
 
-            printf("Page Fault na pagina %u.\n", pagina);
             int quadroLivre = encontraQuadroVazio(memoriaFisica, quantidadeDeQuadros);
 
+            printf("Quadro livre: %d\n", quadroLivre);
             if (quadroLivre != -1) {
                 carregaPagina(memoriaFisica, tabelaDePaginas, quadroLivre, pagina, operacao);
+                memoriaFisica[quadroLivre].tempo = tempoAtual;
                 printf("Pagina %u carregada no quadro %d.\n", pagina, quadroLivre);
 
             } else {
+            printf("Memoria cheia! ");
+               int quadroSubstituido;
 
-                printf("Memoria cheia.\n");
+                if (strcmp(algoritmo, "LRU") == 0) {
+                    quadroSubstituido = lru(memoriaFisica, quantidadeDeQuadros);}
 
-                // Aqui entra os algoritmos 
+                // } else if (strcmp(algoritmo, "CLOCK") == 0) {
+                //     quadroSubstituido = clock();
+
+                // } else if (strcmp(algoritmo, "NRU") == 0) {
+                //     quadroSubstituido = nru();
+
+                // } else {
+                //     quadroSubstituido = otimo();
+
+                // }
+
+            printf("\n\nQuadro escolhido: %d\n", quadroSubstituido);
+            printf("Pagina antiga: %d\n", memoriaFisica[quadroSubstituido].pagina);
+            printf("Pagina nova: %u\n", pagina);
+
+            substituiPagina(memoriaFisica, tabelaDePaginas, quadroSubstituido, pagina, operacao);
+            memoriaFisica[quadroSubstituido].tempo = tempoAtual;
+
+            printf("Substituicao realizada!\n\n");
 
             }
         }
