@@ -98,16 +98,21 @@ void executaProcesso(Processo *processo){
 
 void criaProcesso(int id, Processo *processo, int pcFinal, int *momentosIo, int qtdIos) {
     processo->id = id;
+
     processo->pid = fork();
+
     processo->pc = 0;
+
     processo->pcFinal = pcFinal;
+
     processo->qtdIos = qtdIos;
+
     processo->ioAtual = 0;
 
-    for(int i = 0; i < qtdIos; i++) {
+    for(int i = 0; i < qtdIos; i++){
         processo->momentosIo[i] = momentosIo[i];
     }
-    
+
     if(processo->pid == 0){
         executaProcesso(processo);
         exit(0);
@@ -242,20 +247,23 @@ int main(void) {
         signal(SIGUSR1, finalizaTimeSlice);
         signal(SIGUSR2, liberaIO);
         signal(SIGTTIN, bloqueiaProcesso);
+
         signal(SIGTTOU, bloqueiaProcesso);
         signal(SIGCHLD, trataSigchld);
+
+        signal(SIGCHLD, handle_sigchld);
 
         while(1){
             pause();
         }
         exit(0);
-        
     }
 
     pid_t pidControlador = fork();
 
     if (pidControlador == 0) {
         interControllerSim(kernel);
+
         exit(0);
     }
 
