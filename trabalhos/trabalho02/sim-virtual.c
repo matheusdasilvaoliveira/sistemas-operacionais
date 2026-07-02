@@ -202,9 +202,30 @@ int otimo(Quadro memoriaFisica[], int quantidadeDeQuadros, unsigned int paginas[
     return vitima;
 }
 
-int nru() {
-    //mateus talvez
-  return 0;
+int nru(Quadro memoriaFisica[], int quantidadeDeQuadros) {
+    int quadroVitima = -1;
+    int menorClasse = 4;
+
+    for (int numQuadro = 0; numQuadro < quantidadeDeQuadros; numQuadro++) {
+        int flagReferenciada = memoriaFisica[numQuadro].referenciada;
+        int flagModificada = memoriaFisica[numQuadro].modificada;
+        int classeAtual;
+
+        if (flagReferenciada == 0 && flagModificada == 0) classeAtual = 0;
+        else if (flagReferenciada == 0 && flagModificada == 1) classeAtual = 1;
+        else if (flagReferenciada == 1 && flagModificada == 0) classeAtual = 2;
+        else if (flagReferenciada == 1 && flagModificada == 1) classeAtual = 3;
+
+        if (classeAtual < menorClasse) {
+            menorClasse = classeAtual;
+            quadroVitima = numQuadro;
+
+            if (menorClasse == 0) {
+                break;
+            }
+        }
+    }
+    return quadroVitima;
 }
 
 int main(int argc, char *argv[]) {
@@ -310,8 +331,12 @@ int main(int argc, char *argv[]) {
                 } else if (strcmp(algoritmo, "OTIMO") == 0) {
                     quadroSubstituido = otimo(memoriaFisica, quantidadeDeQuadros, paginas, totalAcessos, i);
 
+                } else if (strcmp(algoritmo, "NRU") == 0) {
+                    quadroSubstituido = nru(memoriaFisica, quantidadeDeQuadros);
+
                 } else {
-                    quadroSubstituido = nru();
+                    printf("Algoritmo não reconhecido ou erro de execução.\n");
+                    return 1;
                 }
 
                 if (memoriaFisica[quadroSubstituido].modificada) {
