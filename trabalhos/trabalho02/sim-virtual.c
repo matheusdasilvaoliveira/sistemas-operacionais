@@ -3,6 +3,8 @@
 #include <string.h>
 
 #define MAX_PAGINAS 1048576
+#define ACESSOS_RESET_NRU 2000
+
 unsigned tempoAtual = 0;
 unsigned long pageFaults = 0;
 unsigned long paginasEscritas = 0;
@@ -90,6 +92,15 @@ FILE *abreArquivo(char *arquivo) {
 
 int calculaQuantidadeDeQuadros(int tamanhoDaMemoria, int tamanhoDaPagina) {
     return (tamanhoDaMemoria * 1024) / tamanhoDaPagina;
+}
+
+void resetaBitsReferenciaNRU(Quadro memoriaFisica[], Pagina tabelaDePaginas[], int quantidadeDeQuadros) {
+    for (int numQuadro = 0; numQuadro < quantidadeDeQuadros; numQuadro++) {
+        memoriaFisica[numQuadro].referenciada = 0;
+        if (memoriaFisica[numQuadro].pagina != -1) {
+            tabelaDePaginas[memoriaFisica[numQuadro].pagina].referenciada = 0;
+        }
+    }
 }
 
 int encontraQuadroVazio(Quadro memoriaFisica[], int quantidadeDeQuadros) {
@@ -303,6 +314,11 @@ int main(int argc, char *argv[]) {
         tempoAtual++;
         unsigned int pagina = paginas[i];
         char operacao = operacoes[i];
+        int resetNRU = strcmp(algoritmo, "NRU") == 0 && (tempoAtual % ACESSOS_RESET_NRU) == 0;
+
+        if (resetNRU) {
+            resetaBitsReferenciaNRU(memoriaFisica, tabelaDePaginas, quantidadeDeQuadros);
+        }
 
         if (tabelaDePaginas[pagina].presente) {
 
